@@ -63,7 +63,14 @@ library(ggplot2)
 library(ggthemes)
 ```
 
-## Including Plots
+Dataset loading and fusion to operate in both dataset
+```{r, echo=TRUE}
+train=read.csv('./Data/train.csv',stringsAsFactors = FALSE,header = TRUE)
+test=read.csv('./Data/test.csv',stringsAsFactors = FALSE,header = TRUE)
+full=bind_rows(train,test)
+summary(full)
+```
+
 
 You can also embed plots, for example:
 
