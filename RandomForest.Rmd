@@ -2,18 +2,21 @@
 title: "RandomForest"
 author: "Diego Polo"
 date: "4 de enero de 2018"
-output: html_document
+output:
+  prettydoc::html_pretty:
+    theme: cayman
+    highlight: github
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## TITANIC SURVIVAL FORECASTING USING RANDOMFOREST ALGORITHM
+# TITANIC SURVIVAL FORECASTING USING RANDOMFOREST ALGORITHM
 
 This is my first kernel and I decided to use RamdonForest algorithm as many of features of datasets are factors and I think RandomForest clasificator would work fine
 
-Overview
+###Overview
 
 The data has been split into two groups:
 
@@ -71,11 +74,70 @@ full=bind_rows(train,test)
 summary(full)
 ```
 
+###Embarkment
 
-You can also embed plots, for example:
+Let's check Embarkment. It shouldn't provide info, it's independent where you embarked and the sunk of Titanic. But I'll check if there are NA in the dataset. Firstly I summarise number of passenger grouped by city of embarkment and lastly number of survivals by city (only in train as I don't know outcomes for test)
 
-```{r pressure, echo=FALSE}
-plot(pressure)
+```{r,echo=TRUE}
+embarked_total=full%>%group_by(Embarked)%>%summarise(num_embarked=n())
+print(embarked_total)
+embarked_survived=full[1:891,]%>%filter(Survived==1)%>%group_by(Embarked)%>%summarise(num_survived=n())
+print(embarked_survived)
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+First, there are 2 NA. I will change them for 'S' as Southhampton is the where most of the people embarked. And I will factorise row
+```{r}
+full$Mod_Embarked=ifelse(is.na(full$Embarked),'S',full$Embarked)
+full$Mod_Embarked=as.factor(full$Mod_Embarked)
+```
+
+Let's make some math, I will calculate percentages of these data
+```{r, echo=TRUE}
+embarked_total=full%>%group_by(Mod_Embarked)%>%summarise(num_embarked=n())
+embarked_survived=full[1:891,]%>%filter(Survived==1)%>%group_by(Mod_Embarked)%>%summarise(num_survived=n())
+
+embarked_total$percentage=embarked_total$num_embarked/sum(embarked_total$num_embarked)*100
+embarked_survived$percentage=embarked_survived$num_survived/sum(embarked_survived$num_survived)*100
+print(data.frame(City=embarked_total$Mod_Embarked, Total=embarked_total$percentage,
+                 Survived=embarked_survived$percentage))
+```
+
+Data are very similar, i don't think this is a good feature, but people from Cherbourg has higher rates of survival.
+
+###Fares
+I continue with 'Fare'. I suppose that higher wealhty, more chances to survive (more boats on decks or not, it can spoil sightseens). Let's do analysis (if it implied Survived I must take full[1,891,])
+```{r, echo=TRUE}
+outcomes=full[1:891,]%>%group_by(Fare,Survived)%>%summarise(num_passengers=n())
+print(outcomes)
+```
+Lots of fares!! I can't deal with this feature! I will split it in four categories:
+
++ luxury >300 pounds
++ 200>high>300 
++ 100>medium>200
++ 50>low>100
++ 0>extralow>50
+
+and barplot the result
+```{r}
+full$Mod_FareLevels=ifelse(full$Fare>=0 & full$Fare<50,'Extralow',ifelse(full$Fare>=50 & full$Fare<100,'Low',ifelse(full$Fare>=100 & full$Fare<200,'Medium',ifelse(full$Fare>=200 & full$Fare<300,'High','Luxury'))))
+full$Mod_FareLevels=as.factor(full$Mod_FareLevels)
+
+outcome=full[1:891,] %>% group_by(Mod_FareLevels,Survived) %>% summarise(num_passenger=n())
+ggplot(outcome,aes(x=Mod_FareLevels, y=num_passenger,fill = Survived))+
+        geom_bar(stat='identity',position='fill', colour='black')+
+        labs(y='Passengers', x='Fare',title='Outcomes')+
+        ggthemes::theme_few()
+```
+As I supposed, most expensive fare passengers survived, maybe they were hosted in upper decks and had more time to get a boat.
+
+###Tickets
+This feature is a mess!! I'll take numbers and whether tickets are compound. At a glance compound tickets looks more poshy and expensive.
+```{r}
+full$Mod_CompoundTicket=as.factor(ifelse(grepl(pattern=" ",x=full$Ticket ),"Yes","No"))
+full$Mod_NumberofTicket=sapply(full$Ticket, function(x) strsplit(x, split=" ")[[1]][2])
+full$Mod_NumberofTicket=ifelse(is.na(full$Mod_NumberofTicket),full$Ticket,full$Mod_NumberofTicket)
+```
+
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.he
