@@ -129,6 +129,7 @@ ggplot(outcome,aes(x=Mod_FareLevels, y=num_passenger,fill = Survived))+
         labs(y='Passengers', x='Fare',title='Outcomes')+
         ggthemes::theme_few()
 ```
+
 As I supposed, most expensive fare passengers survived, maybe they were hosted in upper decks and had more time to get a boat.
 
 ###Tickets
@@ -137,6 +138,103 @@ This feature is a mess!! I'll take numbers and whether tickets are compound. At 
 full$Mod_CompoundTicket=as.factor(ifelse(grepl(pattern=" ",x=full$Ticket ),"Yes","No"))
 full$Mod_NumberofTicket=sapply(full$Ticket, function(x) strsplit(x, split=" ")[[1]][2])
 full$Mod_NumberofTicket=ifelse(is.na(full$Mod_NumberofTicket),full$Ticket,full$Mod_NumberofTicket)
+```
+
+I'll check if compound tickets have something special
+```{r}
+outcome=full[1:891,]%>%group_by(Mod_CompoundTicket,Survived)%>%summarise(num_passenger=n())
+ggplot(outcome, aes(x=Mod_CompoundTicket,y=num_passenger,fill=Survived))+
+    geom_bar(stat="identity",position="fill")+ggthemes::theme_few()
+```
+
+It doesn't give us any conclusions... There are some samples without numbers just letters, therefore I'll force them to a 0
+```{r}
+full$Mod_NumberofTicket=ifelse(grepl(x=full$Mod_NumberofTicket,pattern="[0-9]"),full$Mod_NumberofTicket,"0")
+full$NumeroDeTicket=as.numeric(full$Mod_NumberofTicket)
+```
+ 
+###Gender
+Let's check gender. "Women and children first" must have a meaning in this context.
+```{r}
+full$Sex=as.factor(full$Sex)
+outcome=full[1:891,]%>%group_by(Sex,Survived)%>%summarise(num_survival=n())
+ggplot(outcome, aes(x=Sex,y=num_survival,fill=Survived))+
+    geom_bar(stat='identity',position='fill', colour='Black')+ggthemes::theme_few()
+```
+
+Women have more rate of survivals, as expected
+
+###Class
+Let's check if class give us any info, expected: higher class more survivals
+```{r}
+full$Pclass=as.factor(full$Pclass)
+summary(full$Pclass)
+outcome=full[1:891,]%>%group_by(Pclass,Survived)%>%summarise(num_survival=n())
+ggplot(outcome, aes(x=Pclass, y=num_survival,fill=Survived))+
+    geom_bar(stat='identity', position='fill', colour='black')+ggthemes::theme_tufte()
+```
+
+###Age
+Mean age of survivals
+```{r}
+print(full[1:891,]%>%group_by(Survived)%>%summarise(mean_age=mean(Age,na.rm=TRUE)))
+```
+Histogram of age distribution
+
+```{r}
+agemen=full%>%filter(Sex=='male' & !is.na(Age))
+agewomen=full%>%filter(Sex=='female' & !is.na(Age))
+datamen=data.frame(Age=agemen$Age,Gender='Man')
+datawomen=data.frame(Age=agewomen$Age,Gender='Woman')
+data=rbind(datamen,datawomen)
+ggplot(data, aes(Age,fill=Gender))+geom_histogram(alpha=0.6,binwidth = 5)+ggthemes::theme_fivethirtyeight()
+```
+
+No differences detected. Let's classify age in a range: Kid, Teenager, Adult, Elder
+```{r}
+full$Mod_RangeAge=ifelse(full$Age<5,'Kid',
+              ifelse(full$Age<18, "Teenager",
+              ifelse(full$Age<45,"Adult",
+              ifelse(full$Age<90,"Elder",
+              is.na()))))
+```
+Another plot to represent survival per age range
+```{r}
+outcome=full[1:891,]%>%group_by(Mod_RangeAge,Sex,Survived)%>%summarise(num_passenger=n())
+ggplot(outcome, aes(x=Mod_RangeAge, y=num_passenger,fill=Survived))+
+        geom_bar(stat='identity',position='fill')+
+        facet_wrap(~Sex)+ggthemes::theme_economist_white()
+```
+conclusion: if you are male and you are not a child you die. If you are a woman you have more chance to survive.
+Being Age so important, it is paramount to predict ages witn NA values. There are `r sum(is.na(full$Age))` NA values. I'll get more features and I will come back later to solve this issue
+
+###Name
+I reduce name to only surname as number of names is huge and full of treatment
+```{r}
+full$Mod_Surname=sapply(full$Name, function(x) strsplit(x,split=",")[[1]][1])
+print(head(unique(as.factor(full$Mod_Surname))))
+```
+I have reduced samples. Other feature is wheather they are family or not, for that if SbSp o Parch are different from zero it implies there are relations
+```{r}
+full$Mod_IsFamily=ifelse(full$SibSp>0 | full$Parch>0,"Yes","No")
+```
+Treatment will be another feature
+```{r}
+#extraction of treatments
+data=sapply(full$Name, function(x) strsplit(x, split=", ")[[1]][2])
+full$Mod_Treatment=sapply(data, function(x) strsplit(x, split="[.]")[[1]][1])
+#number of treatments
+print(levels(factor(full$Mod_Treatment)))
+```
+Let's combine male treatment in Mr and female treatment in Mrs or Miss
+```{r}
+nombresmasculinos=c("Capt","Col","Don","Dr","Jonkheer","Major","Master","Mr","Rev","Sir")
+nombresfemeninos=c("Dona","Mlle","Mme","Mrs","Ms","the Countess")
+
+full$Mod_Treatment=ifelse(grepl(paste(nombresmasculinos,collapse="|"),full$Mod_Treatment),"Mr",
+               ifelse(grepl(paste(nombresfemeninos,collapse="|"), full$Mod_Treatment),"Mrs",
+               "Miss"))
+full$Mod_Treatment=as.factor(full$Mod_Treatment)
 ```
 
 
