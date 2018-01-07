@@ -364,6 +364,19 @@ ggplot(rankImportance, aes(x = reorder(Variables, Importance),y = Importance)) +
   geom_text(aes(x = Variables, y = 0.5, label = Rank), hjust=0, vjust=0.55, size = 4, colour = 'lavender',    fontface = 'bold') +
   labs(x = 'Variables', title = 'Relative Variable Importance') +
   coord_flip() + 
-  theme_few()
+  theme_gdocs()
 ```
+
+###Predictions
+Predict using the test set
+```{r}
+prediction <- predict(rf_mod, test, type = 'response')
+# Save the solution to a dataframe
+solution = data.frame('PassengerId' = test$PassengerId, 'Survived'=as.numeric(levels(prediction))[prediction])
+#solution = data.frame(prediction)
+write.csv(solution, 'rf_solution.csv', row.names = FALSE)
+
+```
+
+
 
