@@ -4,7 +4,7 @@ author: "Diego Polo"
 date: "4 de enero de 2018"
 output:
   prettydoc::html_pretty:
-    theme: cayman
+    theme: architect
     highlight: github
 ---
 
@@ -64,6 +64,7 @@ First off, load libraries to use:
 library(dplyr)
 library(ggplot2)
 library(ggthemes)
+library(randomForest)
 ```
 
 Dataset loading and fusion to operate in both dataset
@@ -107,8 +108,10 @@ Data are very similar, i don't think this is a good feature, but people from Che
 ###Fares
 I continue with 'Fare'. I suppose that higher wealhty, more chances to survive (more boats on decks or not, it can spoil sightseens). Let's do analysis (if it implied Survived I must take full[1,891,])
 ```{r, echo=TRUE}
+summary(full$Fare)
+
 outcomes=full[1:891,]%>%group_by(Fare,Survived)%>%summarise(num_passengers=n())
-print(outcomes)
+print(head(outcomes))
 ```
 Lots of fares!! I can't deal with this feature! I will split it in four categories:
 
@@ -131,6 +134,11 @@ ggplot(outcome,aes(x=Mod_FareLevels, y=num_passenger,fill = Survived))+
 ```
 
 As I supposed, most expensive fare passengers survived, maybe they were hosted in upper decks and had more time to get a boat.
+There's 1 NA value to predict, let's put the most likely value
+```{r}
+print(full%>%group_by(Mod_FareLevels)%>%summarise(n()))
+full$Mod_FareLevels[which(is.na(full$Mod_FareLevels))]='Extralow'
+```
 
 ###Tickets
 This feature is a mess!! I'll take numbers and whether tickets are compound. At a glance compound tickets looks more poshy and expensive.
@@ -141,7 +149,7 @@ full$Mod_NumberofTicket=ifelse(is.na(full$Mod_NumberofTicket),full$Ticket,full$M
 ```
 
 I'll check if compound tickets have something special
-```{r}
+```{r, echo=FALSE}
 outcome=full[1:891,]%>%group_by(Mod_CompoundTicket,Survived)%>%summarise(num_passenger=n())
 ggplot(outcome, aes(x=Mod_CompoundTicket,y=num_passenger,fill=Survived))+
     geom_bar(stat="identity",position="fill")+ggthemes::theme_few()
@@ -155,7 +163,7 @@ full$NumeroDeTicket=as.numeric(full$Mod_NumberofTicket)
  
 ###Gender
 Let's check gender. "Women and children first" must have a meaning in this context.
-```{r}
+```{r,echo=FALSE}
 full$Sex=as.factor(full$Sex)
 outcome=full[1:891,]%>%group_by(Sex,Survived)%>%summarise(num_survival=n())
 ggplot(outcome, aes(x=Sex,y=num_survival,fill=Survived))+
@@ -166,9 +174,8 @@ Women have more rate of survivals, as expected
 
 ###Class
 Let's check if class give us any info, expected: higher class more survivals
-```{r}
+```{r,echo=FALSE}
 full$Pclass=as.factor(full$Pclass)
-summary(full$Pclass)
 outcome=full[1:891,]%>%group_by(Pclass,Survived)%>%summarise(num_survival=n())
 ggplot(outcome, aes(x=Pclass, y=num_survival,fill=Survived))+
     geom_bar(stat='identity', position='fill', colour='black')+ggthemes::theme_tufte()
@@ -181,7 +188,7 @@ print(full[1:891,]%>%group_by(Survived)%>%summarise(mean_age=mean(Age,na.rm=TRUE
 ```
 Histogram of age distribution
 
-```{r}
+```{r,echo=FALSE}
 agemen=full%>%filter(Sex=='male' & !is.na(Age))
 agewomen=full%>%filter(Sex=='female' & !is.na(Age))
 datamen=data.frame(Age=agemen$Age,Gender='Man')
@@ -192,19 +199,21 @@ ggplot(data, aes(Age,fill=Gender))+geom_histogram(alpha=0.6,binwidth = 5)+ggthem
 
 No differences detected. Let's classify age in a range: Kid, Teenager, Adult, Elder
 ```{r}
-full$Mod_RangeAge=ifelse(full$Age<5,'Kid',
+full$Mod_RangeAge=ifelse(full$Age<1,'Baby',
+              ifelse(full$Age<5,'Kid',
               ifelse(full$Age<18, "Teenager",
               ifelse(full$Age<45,"Adult",
               ifelse(full$Age<90,"Elder",
-              is.na()))))
+              is.na())))))
 ```
 Another plot to represent survival per age range
-```{r}
+```{r,echo=FALSE}
 outcome=full[1:891,]%>%group_by(Mod_RangeAge,Sex,Survived)%>%summarise(num_passenger=n())
 ggplot(outcome, aes(x=Mod_RangeAge, y=num_passenger,fill=Survived))+
         geom_bar(stat='identity',position='fill')+
         facet_wrap(~Sex)+ggthemes::theme_economist_white()
 ```
+
 conclusion: if you are male and you are not a child you die. If you are a woman you have more chance to survive.
 Being Age so important, it is paramount to predict ages witn NA values. There are `r sum(is.na(full$Age))` NA values. I'll get more features and I will come back later to solve this issue
 
@@ -214,11 +223,45 @@ I reduce name to only surname as number of names is huge and full of treatment
 full$Mod_Surname=sapply(full$Name, function(x) strsplit(x,split=",")[[1]][1])
 print(head(unique(as.factor(full$Mod_Surname))))
 ```
-I have reduced samples. Other feature is wheather they are family or not, for that if SbSp o Parch are different from zero it implies there are relations
-```{r}
-full$Mod_IsFamily=ifelse(full$SibSp>0 | full$Parch>0,"Yes","No")
+I have reduced samples.
+
+###SibSp and Parch
+Other feature is wheather they are family or not, for that if SbSp o Parch are different from zero it implies there are relations
+```{r,echo=FALSE}
+full$Mod_IsFamily=as.factor(ifelse(full$SibSp>0 | full$Parch>0,"Yes","No"))
+outcome=full[1:891,]%>%group_by(Mod_IsFamily,Survived)%>%summarise(num_survival=n())
+ggplot(outcome, aes(x=Mod_IsFamily, y=num_survival,fill=Survived))+
+    geom_bar(stat='identity', position='fill', colour='black')+
+    labs(title = 'IsFamily')
+    ggthemes::theme_gdocs()
+
 ```
-Treatment will be another feature
+Let's examine if there is any correlation between survivals and sibSp and Parch
+```{r}
+outcome=full[1:891,]%>%group_by(SibSp,Survived)%>%summarise(num_survival=n())
+outcome2=full[1:891,]%>%group_by(Parch,Survived)%>%summarise(num_survival=n())
+full$Mod_SibSpParch=full$SibSp+full$Parch
+outcome3=full[1:891,]%>%group_by(Mod_SibSpParch,Survived)%>%summarise(num_survival=n())
+```
+Plotting results to analyse
+```{r,echo=FALSE}
+ggplot(outcome, aes(x=SibSp, y=num_survival,fill=Survived))+
+    geom_bar(stat='identity', position='fill', colour='black')+
+    labs(title = 'SibSp')
+    ggthemes::theme_gdocs()
+
+ggplot(outcome2, aes(x=Parch, y=num_survival,fill=Survived))+
+    geom_bar(stat='identity', position='fill', colour='black')+
+    labs(title = 'Parch')
+    ggthemes::theme_gdocs()
+ggplot(outcome3, aes(x=Mod_SibSpParch, y=num_survival,fill=Survived))+
+    geom_bar(stat='identity', position='fill', colour='black')+
+    labs(title = 'SibSp+Parch')
+    ggthemes::theme_gdocs()
+```
+
+
+###Treatmen
 ```{r}
 #extraction of treatments
 data=sapply(full$Name, function(x) strsplit(x, split=", ")[[1]][2])
@@ -237,5 +280,90 @@ full$Mod_Treatment=ifelse(grepl(paste(nombresmasculinos,collapse="|"),full$Mod_T
 full$Mod_Treatment=as.factor(full$Mod_Treatment)
 ```
 
+###Age 2
+We need to solve NA values in Age. I'll take class, treatment and mean age to define new ages
+```{r}
+meanages=full%>%group_by(Pclass,Mod_Treatment)%>%summarise(mean_age=mean(Age,na.rm=TRUE))
+print(meanages)
+#Last item is NaN and put something by default
+meanages$mean_age[9]=mean(full$Age[which(full$Mod_Treatment=="Mrs")],na.rm=TRUE)
+print(meanages)
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.he
+full$Mod_Age=full$Age
+head(full$Mod_Age)
+full$Mod_Age=ifelse(is.na(full$Mod_Age) & full$Pclass==1 & full$Mod_Treatment=="Miss",meanages$mean_age[1],
+            ifelse(is.na(full$Mod_Age) & full$Pclass==1 & full$Mod_Treatment=="Mr",meanages$mean_age[2],
+            ifelse(is.na(full$Mod_Age) &full$Pclass==1 & full$Mod_Treatment=="Mrs",meanages$mean_age[3],
+            ifelse(is.na(full$Mod_Age) &full$Pclass==2 & full$Mod_Treatment=="Miss",meanages$mean_age[4],
+            ifelse(is.na(full$Mod_Age) &full$Pclass==2 & full$Mod_Treatment=="Mr",meanages$mean_age[5],
+            ifelse(is.na(full$Mod_Age) &full$Pclass==2 & full$Mod_Treatment=="Mrs",meanages$mean_age[6],
+            ifelse(is.na(full$Mod_Age) &full$Pclass==3 & full$Mod_Treatment=="Miss",meanages$mean_age[7],
+            ifelse(is.na(full$Mod_Age) &full$Pclass==3 & full$Mod_Treatment=="Mr",meanages$mean_age[8],
+            meanages$mean_age[9]))))))))
+
+```
+
+
+I re-apply RangeAge
+```{r}
+full$Mod_RangeAge=ifelse(full$Mod_Age<1,'Baby',
+              ifelse(full$Mod_Age<5,'Kid',
+              ifelse(full$Mod_Age<18, "Teenager",
+              ifelse(full$Mod_Age<45,"Adult",
+              ifelse(full$Mod_Age<90,"Elder",
+              '')))))
+full$Mod_RangeAge=as.factor(full$Mod_RangeAge)
+```
+
+###RandomForest
+First check that all features are factors
+Let's split data set in train and test subsets
+```{r}
+
+full$Survived=as.factor(full$Survived)
+full$SibSp=as.factor(full$SibSp)
+full$Parch=as.factor(full$Parch)
+
+train=full[1:891,]
+test=full[892:nrow(full),]
+```
+Set random seed
+```{r}
+set.seed(112)
+```
+Building the model and compute execution time
+```{r}
+
+start_time <- Sys.time()
+
+rf_mod <- randomForest(Survived ~ Pclass+Sex+Mod_FareLevels+Mod_CompoundTicket+Mod_RangeAge+Mod_IsFamily+Mod_Treatment, 
+  data = train, 
+  ntree = 2000, 
+  importance = TRUE)
+end_time <- Sys.time()
+print(paste0("Training excution time:",end_time - start_time))
+```
+Plotting errors
+```{r}
+plot(rf_mod, ylim=c(0,1))
+legend('topright', colnames(rf_mod$err.rate), col=1:6, fill=1:6)
+```
+Get importance of features
+```{r}
+importance=importance(rf_mod)
+print(head(importance))
+varImportance=data.frame(Variables = row.names(importance), 
+                            Importance = round(importance[ ,'MeanDecreaseGini'],2))
+print(head(varImportance))
+
+# Create a rank variable based on importance
+rankImportance=varImportance %>%mutate(Rank = paste0('#',dense_rank(desc(Importance))))
+
+ggplot(rankImportance, aes(x = reorder(Variables, Importance),y = Importance)) +
+  geom_bar(stat='identity', colour = 'black') +
+  geom_text(aes(x = Variables, y = 0.5, label = Rank), hjust=0, vjust=0.55, size = 4, colour = 'lavender',    fontface = 'bold') +
+  labs(x = 'Variables', title = 'Relative Variable Importance') +
+  coord_flip() + 
+  theme_few()
+```
+
