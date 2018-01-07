@@ -68,7 +68,7 @@ library(randomForest)
 ```
 
 Dataset loading and fusion to operate in both dataset
-```{r, echo=TRUE}
+```{r, }
 train=read.csv('./Data/train.csv',stringsAsFactors = FALSE,header = TRUE)
 test=read.csv('./Data/test.csv',stringsAsFactors = FALSE,header = TRUE)
 full=bind_rows(train,test)
@@ -79,7 +79,7 @@ summary(full)
 
 Let's check Embarkment. It shouldn't provide info, it's independent where you embarked and the sunk of Titanic. But I'll check if there are NA in the dataset. Firstly I summarise number of passenger grouped by city of embarkment and lastly number of survivals by city (only in train as I don't know outcomes for test)
 
-```{r,echo=TRUE}
+```{r,}
 embarked_total=full%>%group_by(Embarked)%>%summarise(num_embarked=n())
 print(embarked_total)
 embarked_survived=full[1:891,]%>%filter(Survived==1)%>%group_by(Embarked)%>%summarise(num_survived=n())
@@ -93,7 +93,7 @@ full$Mod_Embarked=as.factor(full$Mod_Embarked)
 ```
 
 Let's make some math, I will calculate percentages of these data
-```{r, echo=TRUE}
+```{r, }
 embarked_total=full%>%group_by(Mod_Embarked)%>%summarise(num_embarked=n())
 embarked_survived=full[1:891,]%>%filter(Survived==1)%>%group_by(Mod_Embarked)%>%summarise(num_survived=n())
 
@@ -107,7 +107,7 @@ Data are very similar, i don't think this is a good feature, but people from Che
 
 ###Fares
 I continue with 'Fare'. I suppose that higher wealhty, more chances to survive (more boats on decks or not, it can spoil sightseens). Let's do analysis (if it implied Survived I must take full[1,891,])
-```{r, echo=TRUE}
+```{r, }
 summary(full$Fare)
 
 outcomes=full[1:891,]%>%group_by(Fare,Survived)%>%summarise(num_passengers=n())
@@ -149,7 +149,7 @@ full$Mod_NumberofTicket=ifelse(is.na(full$Mod_NumberofTicket),full$Ticket,full$M
 ```
 
 I'll check if compound tickets have something special
-```{r, echo=FALSE}
+```{r, }
 outcome=full[1:891,]%>%group_by(Mod_CompoundTicket,Survived)%>%summarise(num_passenger=n())
 ggplot(outcome, aes(x=Mod_CompoundTicket,y=num_passenger,fill=Survived))+
     geom_bar(stat="identity",position="fill")+ggthemes::theme_few()
@@ -163,7 +163,7 @@ full$NumeroDeTicket=as.numeric(full$Mod_NumberofTicket)
  
 ###Gender
 Let's check gender. "Women and children first" must have a meaning in this context.
-```{r,echo=FALSE}
+```{r,}
 full$Sex=as.factor(full$Sex)
 outcome=full[1:891,]%>%group_by(Sex,Survived)%>%summarise(num_survival=n())
 ggplot(outcome, aes(x=Sex,y=num_survival,fill=Survived))+
@@ -174,7 +174,7 @@ Women have more rate of survivals, as expected
 
 ###Class
 Let's check if class give us any info, expected: higher class more survivals
-```{r,echo=FALSE}
+```{r
 full$Pclass=as.factor(full$Pclass)
 outcome=full[1:891,]%>%group_by(Pclass,Survived)%>%summarise(num_survival=n())
 ggplot(outcome, aes(x=Pclass, y=num_survival,fill=Survived))+
@@ -188,7 +188,7 @@ print(full[1:891,]%>%group_by(Survived)%>%summarise(mean_age=mean(Age,na.rm=TRUE
 ```
 Histogram of age distribution
 
-```{r,echo=FALSE}
+```{r}
 agemen=full%>%filter(Sex=='male' & !is.na(Age))
 agewomen=full%>%filter(Sex=='female' & !is.na(Age))
 datamen=data.frame(Age=agemen$Age,Gender='Man')
@@ -207,7 +207,7 @@ full$Mod_RangeAge=ifelse(full$Age<1,'Baby',
               is.na())))))
 ```
 Another plot to represent survival per age range
-```{r,echo=FALSE}
+```{r}
 outcome=full[1:891,]%>%group_by(Mod_RangeAge,Sex,Survived)%>%summarise(num_passenger=n())
 ggplot(outcome, aes(x=Mod_RangeAge, y=num_passenger,fill=Survived))+
         geom_bar(stat='identity',position='fill')+
@@ -227,14 +227,12 @@ I have reduced samples.
 
 ###SibSp and Parch
 Other feature is wheather they are family or not, for that if SbSp o Parch are different from zero it implies there are relations
-```{r,echo=FALSE}
+```{r}
 full$Mod_IsFamily=as.factor(ifelse(full$SibSp>0 | full$Parch>0,"Yes","No"))
 outcome=full[1:891,]%>%group_by(Mod_IsFamily,Survived)%>%summarise(num_survival=n())
 ggplot(outcome, aes(x=Mod_IsFamily, y=num_survival,fill=Survived))+
     geom_bar(stat='identity', position='fill', colour='black')+
-    labs(title = 'IsFamily')
-    ggthemes::theme_gdocs()
-
+ggthemes::theme_gdocs()
 ```
 Let's examine if there is any correlation between survivals and sibSp and Parch
 ```{r}
@@ -244,20 +242,18 @@ full$Mod_SibSpParch=full$SibSp+full$Parch
 outcome3=full[1:891,]%>%group_by(Mod_SibSpParch,Survived)%>%summarise(num_survival=n())
 ```
 Plotting results to analyse
-```{r,echo=FALSE}
+```{r}
 ggplot(outcome, aes(x=SibSp, y=num_survival,fill=Survived))+
-    geom_bar(stat='identity', position='fill', colour='black')+
-    labs(title = 'SibSp')
-    ggthemes::theme_gdocs()
+    geom_bar(stat='identity', position='fill', color='black')+
+    ggthemes::theme_hc()
 
 ggplot(outcome2, aes(x=Parch, y=num_survival,fill=Survived))+
-    geom_bar(stat='identity', position='fill', colour='black')+
-    labs(title = 'Parch')
-    ggthemes::theme_gdocs()
+    geom_bar(stat='identity', position='fill', color='black')+
+    ggthemes::theme_hc()
+
 ggplot(outcome3, aes(x=Mod_SibSpParch, y=num_survival,fill=Survived))+
-    geom_bar(stat='identity', position='fill', colour='black')+
-    labs(title = 'SibSp+Parch')
-    ggthemes::theme_gdocs()
+    geom_bar(stat='identity', position='fill', color='black')+
+    ggthemes::theme_hc()
 ```
 
 
@@ -375,7 +371,6 @@ prediction <- predict(rf_mod, test, type = 'response')
 solution = data.frame('PassengerId' = test$PassengerId, 'Survived'=as.numeric(levels(prediction))[prediction])
 #solution = data.frame(prediction)
 write.csv(solution, 'rf_solution.csv', row.names = FALSE)
-
 ```
 
 
