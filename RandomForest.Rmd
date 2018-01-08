@@ -64,6 +64,7 @@ First off, load libraries to use:
 library(dplyr)
 library(ggplot2)
 library(ggthemes)
+library(rpart)
 library(randomForest)
 ```
 
@@ -226,19 +227,21 @@ print(head(unique(as.factor(full$Mod_Surname))))
 I have reduced samples.
 
 ###SibSp and Parch
-Other feature is wheather they are family or not, for that if SbSp o Parch are different from zero it implies there are relations
+Other feature is wheather they are family or not, for that if SbSp o Parch are different from zero it implies there are relations. Family size could be another feature
 ```{r}
 full$Mod_IsFamily=as.factor(ifelse(full$SibSp>0 | full$Parch>0,"Yes","No"))
+full$Mod_FamilySize=full$SibSp+full$Parch
+
 outcome=full[1:891,]%>%group_by(Mod_IsFamily,Survived)%>%summarise(num_survival=n())
 ggplot(outcome, aes(x=Mod_IsFamily, y=num_survival,fill=Survived))+
     geom_bar(stat='identity', position='fill', colour='black')+
-ggthemes::theme_gdocs()
+    ggthemes::theme_gdocs()
 ```
 Let's examine if there is any correlation between survivals and sibSp and Parch
 ```{r}
 outcome=full[1:891,]%>%group_by(SibSp,Survived)%>%summarise(num_survival=n())
 outcome2=full[1:891,]%>%group_by(Parch,Survived)%>%summarise(num_survival=n())
-full$Mod_SibSpParch=full$SibSp+full$Parch
+full$Mod_SibSpParch=full$SibSp+full$Parch+1
 outcome3=full[1:891,]%>%group_by(Mod_SibSpParch,Survived)%>%summarise(num_survival=n())
 ```
 Plotting results to analyse
@@ -256,6 +259,14 @@ ggplot(outcome3, aes(x=Mod_SibSpParch, y=num_survival,fill=Survived))+
     ggthemes::theme_hc()
 ```
 
+Relation between FamilySize and Survival
+```{r}
+outcome=full[1:891,]%>%group_by(Mod_FamilySize,Survived)%>%summarise(num_survival=n())
+ggplot(outcome, aes(x=Mod_FamilySize,y=num_survival,fill=Survived))+
+    geom_bar(stat='identity', position='fill', colour='black')+
+    ggthemes::theme_tufte()
+```
+
 
 ###Treatmen
 ```{r}
@@ -267,18 +278,50 @@ print(levels(factor(full$Mod_Treatment)))
 ```
 Let's combine male treatment in Mr and female treatment in Mrs or Miss
 ```{r}
-nombresmasculinos=c("Capt","Col","Don","Dr","Jonkheer","Major","Master","Mr","Rev","Sir")
+nombresmasculinos=c("Don","Dr","Jonkheer","Master","Mr","Rev","Sir")
 nombresfemeninos=c("Dona","Mlle","Mme","Mrs","Ms","the Countess")
+nombresmilitares=c("Capt","Col","Dr","Major")
 
 full$Mod_Treatment=ifelse(grepl(paste(nombresmasculinos,collapse="|"),full$Mod_Treatment),"Mr",
-               ifelse(grepl(paste(nombresfemeninos,collapse="|"), full$Mod_Treatment),"Mrs",
-               "Miss"))
+           ifelse(grepl(paste(nombresfemeninos,collapse="|"), full$Mod_Treatment),"Mrs",
+               ifelse(grepl(paste(nombresmilitares,collapse="|"), full$Mod_Treatment),"Officer",              
+               "Miss")))
 full$Mod_Treatment=as.factor(full$Mod_Treatment)
 ```
+###Deck
+```{r}
+full$Mod_Deck=sapply(full$Cabin, function(x) strsplit(x, split="")[[1]][1])
+full$Mod_Deck[is.na(full$Mod_Deck)]="Unknown"
+full$Mod_Deck=as.factor(full$Mod_Deck)
+
+outcome=full[1:891,]%>%group_by(Mod_Deck,Survived)%>%summarise(num_survival=n())
+ggplot(outcome, aes(x=Mod_Deck,y=num_survival,fill=Survived))+
+    geom_bar(stat='identity',position='fill',colour='black')+
+    ggthemes::theme_few()
+
+```
+
+Deck T is doomed :)
+
 
 ###Age 2
-We need to solve NA values in Age. I'll take class, treatment and mean age to define new ages
+We will use rpart
 ```{r}
+age_fit <- rpart(Age~ Pclass+Sex+Mod_FareLevels+Mod_CompoundTicket+Mod_IsFamily+Mod_Treatment+Mod_FamilySize+Mod_Deck, 
+              data = full[!is.na(full$Age), ],method = 'anova')
+
+full$Mod_Age=full$Age
+
+full$Mod_Age[is.na(full$Mod_Age)]=predict(age_fit, full[is.na(full$Mod_Age), ])
+
+# All gone? Yes.
+sum(is.na(full$Mod_Age))
+```
+
+
+
+We need to solve NA values in Age. I'll take class, treatment and mean age to define new ages
+```{r, eval=FALSE, include=FALSE}
 meanages=full%>%group_by(Pclass,Mod_Treatment)%>%summarise(mean_age=mean(Age,na.rm=TRUE))
 print(meanages)
 #Last item is NaN and put something by default
@@ -332,7 +375,7 @@ Building the model and compute execution time
 
 start_time <- Sys.time()
 
-rf_mod <- randomForest(Survived ~ Pclass+Sex+Mod_FareLevels+Mod_CompoundTicket+Mod_RangeAge+Mod_IsFamily+Mod_Treatment, 
+rf_mod <- randomForest(Survived ~ Pclass+Sex+Mod_FareLevels+Mod_CompoundTicket+Mod_Age+Mod_IsFamily+Mod_Treatment+Mod_FamilySize+Mod_Deck, 
   data = train, 
   ntree = 2000, 
   importance = TRUE)
